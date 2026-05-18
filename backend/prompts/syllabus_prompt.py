@@ -1,18 +1,24 @@
 SYLLABUS_PROMPT = """
-You are an expert syllabus parser.
+Extract the important interview topics from this syllabus.
 
-Your task is to extract all units, topics, and subtopics from the syllabus.
+Return ONLY valid JSON.
 
-Return ONLY a valid JSON object.
-Do NOT include explanations, notes, or markdown.
-
-The JSON must follow this structure exactly:
+Format:
 
 {{
-  "Unit 1: Unit Name": {{
-    "Topic Name": ["subtopic1", "subtopic2"]
-  }}
+  "topics": [
+    "Topic 1",
+    "Topic 2",
+    "Topic 3"
+  ]
 }}
+
+Rules:
+- Keep only important technical interview topics
+- Remove units and numbering
+- Keep topics concise
+- No explanations
+- No markdown
 
 Syllabus:
 {syllabus}

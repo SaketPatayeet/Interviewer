@@ -1,26 +1,29 @@
 REPORT_PROMPT = """
-You are an expert evaluator.
+Generate a professional interview evaluation report.
 
-Interview summary:
+Interview evaluations:
+{evaluations}
 
-- Questions answered: {covered}/{total}
-- Weak topics: {weak_topics}
+Weak topics:
+{weak_topics}
 
-Conversation:
-{conversation}
+Total questions asked:
+{question_count}
 
-Generate a final report.
-
-CRITICAL:
-- Output ONLY valid JSON
-- No explanation
+Return ONLY valid JSON.
 
 Format:
 
 {{
-  "summary": "overall performance",
-  "strengths": ["..."],
-  "weaknesses": ["..."],
-  "suggestions": ["..."]
+  "overall_performance": "...",
+  "strengths": ["...", "..."],
+  "weaknesses": ["...", "..."],
+  "suggestions": ["...", "..."],
+  "final_score": 0
 }}
+
+Rules:
+- final_score must be between 0 and 10
+- keep feedback concise
+- be professional and constructive
 """

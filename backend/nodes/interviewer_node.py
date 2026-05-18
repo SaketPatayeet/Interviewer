@@ -1,62 +1,95 @@
+from langgraph.types import interrupt
+from llm import generate_json
+from prompts.interviewer_prompt import INTERVIEWER_PROMPT
+
+
+MAX_QUESTIONS = 10
+
+
 def interviewer_node(state):
 
-    question_bank = state["question_bank"]
-    covered_ids = state.get("covered_ids", [])
-    follow_up = state.get("follow_up")
+    topics = state["topics"]
+
+    topic_index = state.get("current_topic_index", 0)
+
     strictness = state.get("strictness", 5)
+
     conversation = state.get("conversation", [])
 
-    # 1️⃣ If follow-up exists → ask it first
-    if follow_up:
-        question = {
-            "id": "follow_up",
-            "question": follow_up,
-            "topic": state["current_question"]["topic"],
-            "level": "follow_up"
-        }
+    follow_up = state.get("follow_up")
 
-        conversation.append({
-            "role": "interviewer",
-            "content": follow_up
-        })
+    question_count = state.get("question_count", 0)
+
+    weak_topics = state.get("weak_topics", [])
+
+    # ===== END CONDITIONS =====
+
+    if topic_index >= len(topics):
 
         return {
-            "current_question": question,
-            "conversation": conversation,
-            "follow_up": None   # clear after asking
+            "should_end": True
         }
 
-    # 2️⃣ Decide allowed difficulty levels
-    levels = ["basic"]
-    if strictness >= 4:
-        levels.append("intermediate")
-    if strictness >= 8:
-        levels.append("advanced")
+    if question_count >= MAX_QUESTIONS:
 
-    # 3️⃣ Find next uncovered question
-    for topic, level_data in question_bank.items():
-        for level in levels:
-            for q in level_data.get(level, []):
-                if q["id"] not in covered_ids:
+        return {
+            "should_end": True
+        }
 
-                    question = {
-                        **q,
-                        "topic": topic,
-                        "level": level
-                    }
+    # ===== CURRENT TOPIC =====
 
-                    conversation.append({
-                        "role": "interviewer",
-                        "content": q["question"]
-                    })
+    topic = topics[topic_index]
 
-                    return {
-                        "current_question": question,
-                        "conversation": conversation
-                    }
+    # ===== FOLLOW-UP =====
 
-    # 4️⃣ No questions left → signal end
+    if follow_up:
+
+        question = follow_up
+
+    else:
+
+        difficulty = "basic"
+
+        if strictness >= 4:
+            difficulty = "intermediate"
+
+        if strictness >= 8:
+            difficulty = "advanced"
+
+        prompt = INTERVIEWER_PROMPT.format(
+            topic=topic,
+            difficulty=difficulty,
+            weak_topics=weak_topics,
+            question_count=question_count,
+            conversation=conversation[-4:]
+        )
+
+        result = generate_json(prompt, max_tokens=256,temperature=0.8)
+
+        question = result["question"]
+
+    # ===== SAVE QUESTION =====
+
+    conversation.append({
+        "role": "interviewer",
+        "content": question
+    })
+
+    # ===== INTERRUPT =====
+
+    answer = interrupt(question)
+
     return {
-        "current_question": None,
-        "conversation": conversation
+        "current_question": {
+            "question": question,
+            "topic": topic
+        },
+
+        "last_answer": answer,
+
+        "conversation": conversation,
+
+        "question_count": question_count + 1,
+
+        "follow_up": None
     }

@@ -1,51 +1,22 @@
-import ollama
-import json
+from llm import generate_json
 from prompts.report_prompt import REPORT_PROMPT
 
-def report_node(state):
-    covered = state.get("covered_ids",[])
-    weak_topics = state.get("weak_topics", [])
-    conversation = state.get("conversation", [])
-    question_bank = state.get("question_bank", {})
 
-    total = sum(
-        len(levels.get("basic", [])) +
-        len(levels.get("intermediate", [])) +
-        len(levels.get("advanced", []))
-        for levels in question_bank.values()
-    )
+def report_node(state):
+
+    evaluations = state.get("evaluations", [])
+
+    weak_topics = state.get("weak_topics", [])
+
+    question_count = state.get("question_count", 0)
 
     prompt = REPORT_PROMPT.format(
-        covered = len(covered),
-        total = total,
-        weak_topics = json.dumps(weak_topics),
-        conversation = json.dumps(conversation)
+        evaluations=evaluations,
+        weak_topics=weak_topics,
+        question_count=question_count
     )
 
-    response = ollama.chat(
-        model = "llama3.2",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    raw = response["message"]["content"]
-
-    raw = raw.replace("```json", "").replace("```", "").strip()
-
-    start = raw.find("{")
-    end = raw.rfind("}")
-    raw = raw[start:end+1]
-
-    # fix braces
-    open_braces = raw.count("{")
-    close_braces = raw.count("}")
-    if close_braces < open_braces:
-        raw += "}" * (open_braces - close_braces)
-
-    try:
-        report = json.loads(raw)
-    except Exception as e:
-        print("REPORT RAW:", raw)
-        raise e
+    report = generate_json(prompt, max_tokens=512)
 
     return {
         "report": report
