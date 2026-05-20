@@ -1,0 +1,47 @@
+# ===== FASTAPI =====
+fastapi
+uvicorn
+python-multipart
+
+# ===== LANGGRAPH / LLM =====
+langgraph
+langchain
+langchain-core
+langchain-community
+langchain-openai
+
+# ===== AUDIO PROCESSING =====
+faster-whisper
+sounddevice
+soundfile
+librosa
+numpy
+scipy
+pydub
+
+# ===== TTS =====
+edge-tts
+pygame
+
+# ===== VIDEO / VISION =====
+opencv-python
+mediapipe
+
+# ===== PDF PARSING =====
+pypdf
+
+# ===== UTILITIES =====
+requests
+python-dotenv
+
+# ===== OPTIONAL ML / TORCH =====
+torch
+torchaudio
+transformers
+sentencepiece
+
+# ===== JSON / VALIDATION =====
+pydantic
+
+# ===== CORS =====
+starlette
