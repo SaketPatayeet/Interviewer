@@ -26,6 +26,8 @@ class InterviewState(TypedDict):
 
     should_end: bool
 
+    audio_metrics: List[Dict]
+    vision_metrics: List[Dict]
     # ===== TEMPORARY =====
     last_answer: str
 

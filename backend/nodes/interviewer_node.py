@@ -22,6 +22,8 @@ def interviewer_node(state):
 
     weak_topics = state.get("weak_topics", [])
 
+    
+
     # ===== END CONDITIONS =====
 
     if topic_index >= len(topics):
@@ -71,21 +73,64 @@ def interviewer_node(state):
     # ===== SAVE QUESTION =====
 
     conversation.append({
-        "role": "interviewer",
+        "role": "interviewer",  
         "content": question
     })
 
     # ===== INTERRUPT =====
 
-    answer = interrupt(question)
+    response = interrupt(question)
+
+    answer = response["answer"]
+
+    audio_metrics = response.get(
+        "audio_metrics",
+        {}
+    )
+
+    all_audio_metrics = list(
+        state.get("audio_metrics", [])
+    )
+
+    vision_metrics = response.get(
+        "vision_metrics",
+        {}
+    )
+
+    all_vision_metrics = list(
+        state.get("vision_metrics", [])
+    )
+
+    if audio_metrics:
+
+        all_audio_metrics.append(audio_metrics)
+
+    
+
+    if vision_metrics:
+
+        all_vision_metrics.append(
+            vision_metrics
+        )
+
+    print("\nAUDIO METRICS RECEIVED:")
+    print(audio_metrics)
+
+    print("\nVIDEO METRICS RECEIVED:")
+    print(vision_metrics)
 
     return {
+
         "current_question": {
             "question": question,
             "topic": topic
         },
 
         "last_answer": answer,
+
+        "audio_metrics": all_audio_metrics,
+
+        "vision_metrics": all_vision_metrics,
 
         "conversation": conversation,
 

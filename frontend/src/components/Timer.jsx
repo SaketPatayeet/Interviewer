@@ -1,41 +1,88 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 function Timer({
+
   duration,
+
+  question,
+
   onTimeUp
 }) {
 
   const [timeLeft, setTimeLeft] =
     useState(duration)
 
+  const hasTriggeredRef =
+    useRef(false)
+
+  const intervalRef =
+    useRef(null)
+
+  // ===== RESET ONLY WHEN QUESTION CHANGES =====
+
   useEffect(() => {
+
+    // ===== RESET =====
 
     setTimeLeft(duration)
 
-    const interval = setInterval(() => {
+    hasTriggeredRef.current = false
 
-      setTimeLeft(prev => {
+    // ===== CLEAR OLD =====
 
-        if (prev <= 1) {
+    if (intervalRef.current) {
 
-          clearInterval(interval)
+      clearInterval(
+        intervalRef.current
+      )
+    }
 
-          if (onTimeUp) {
-            onTimeUp()
+    // ===== START TIMER =====
+
+    intervalRef.current =
+      setInterval(() => {
+
+        setTimeLeft(prev => {
+
+          if (prev <= 1) {
+
+            clearInterval(
+              intervalRef.current
+            )
+
+            if (
+              !hasTriggeredRef.current
+            ) {
+
+              hasTriggeredRef.current = true
+
+              if (onTimeUp) {
+
+                onTimeUp()
+              }
+            }
+
+            return 0
           }
 
-          return 0
-        }
+          return prev - 1
+        })
 
-        return prev - 1
+      }, 1000)
 
-      })
+    // ===== CLEANUP =====
 
-    }, 1000)
+    return () => {
 
-    return () => clearInterval(interval)
+      if (intervalRef.current) {
 
-  }, [duration])
+        clearInterval(
+          intervalRef.current
+        )
+      }
+    }
+
+  }, [question]) // ONLY QUESTION
 
   return (
 

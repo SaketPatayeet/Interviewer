@@ -10,6 +10,8 @@ from graph import graph
 
 from voice.tts import text_to_speech
 from voice.whisper_service import transcribe_audio
+from voice.voice_analyzer import VoiceAnalyzer
+from vision.vision_analyzer import VisionAnalyzer
 
 from utils.pdf_parser import extract_text
 
@@ -17,6 +19,9 @@ router = APIRouter(
     prefix="/interview",
     tags=["Interview"]
 )
+
+analyzer = VoiceAnalyzer()
+vision_analyzer = VisionAnalyzer()
 
 @router.post("/upload-syllabus")
 async def upload_syllabus(
@@ -67,9 +72,16 @@ async def start_interview(data: dict):
             5
         ),
 
+        "audio_metrics": [],
+        "vision_metrics": [],
+        "evaluations": [],
         "conversation": [],
-
-        "weak_topics": []
+        "weak_topics": [],
+        "question_count": 0,
+        "follow_up_count": 0,
+        "topic_question_count": 0,
+        "current_topic_index": 0,
+        "should_end": False
     }
 
     # Start graph execution
@@ -106,6 +118,16 @@ async def submit_answer(data: dict):
 
     answer = data["answer"]
 
+    audio_metrics = data.get(
+        "audio_metrics",
+        {}
+    )
+
+    vision_metrics = data.get(
+        "vision_metrics",
+        {}
+    )
+
     config = {
         "configurable": {
             "thread_id": thread_id
@@ -114,9 +136,15 @@ async def submit_answer(data: dict):
 
     # Resume graph execution
     result = graph.invoke(
-        Command(resume=answer),
-        config=config
-    )
+    Command(
+        resume={
+            "answer": answer,
+            "audio_metrics": audio_metrics,
+            "vision_metrics": vision_metrics
+        }
+    ),
+    config=config
+)
 
     # ===== INTERVIEW FINISHED =====
 
@@ -161,23 +189,89 @@ async def upload_audio(
         exist_ok=True
     )
 
-    file_path = os.path.join(
-        "uploads",
+    # ===== KEEP ORIGINAL EXTENSION =====
+
+    extension = (
         audio.filename
+        .split(".")[-1]
     )
 
-    # Save uploaded audio
+    filename = (
+        f"{uuid.uuid4()}.{extension}"
+    )
+
+    file_path = os.path.join(
+        "uploads",
+        filename
+    )
+
+    # ===== SAVE AUDIO =====
+
     with open(file_path, "wb") as buffer:
 
         buffer.write(
             await audio.read()
         )
 
-    # Transcribe audio
+    print("\nSAVED AUDIO:")
+    print(file_path)
+
+    # ===== TRANSCRIBE =====
+
     transcript = transcribe_audio(
         file_path
     )
 
+    # ===== ANALYZE =====
+
+    metrics = analyzer.analyze(
+        file_path,
+        transcript,
+        {}
+    )
+
     return {
-        "transcript": transcript
+
+        "transcript": transcript,
+
+        "audio_metrics": metrics
+    }
+
+@router.post("/upload-video")
+async def upload_video(
+    video: UploadFile = File(...)
+):
+
+    os.makedirs(
+        "uploads",
+        exist_ok=True
+    )
+
+    filename = f"{uuid.uuid4()}.webm"
+
+    file_path = os.path.join(
+        "uploads",
+        filename
+    )
+
+    # ===== SAVE VIDEO =====
+
+    with open(file_path, "wb") as buffer:
+
+        buffer.write(
+            await video.read()
+        )
+
+    # ===== ANALYZE VIDEO =====
+
+    vision_metrics = (
+        vision_analyzer.analyze(
+            file_path
+        )
+    )
+
+    return {
+
+        "vision_metrics":
+            vision_metrics
     }

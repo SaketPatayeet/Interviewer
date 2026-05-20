@@ -26,6 +26,33 @@ def evaluator_node(state):
 
     conversation = state.get("conversation", [])
 
+    audio_metrics_history = state.get(
+        "audio_metrics",
+        []
+    )
+
+    latest_audio_metrics = (
+        audio_metrics_history[-1]
+        if audio_metrics_history else {}
+    )
+
+    vision_metrics_history = state.get(
+        "vision_metrics",
+        []
+    )
+
+    latest_vision_metrics = (
+        vision_metrics_history[-1]
+        if vision_metrics_history else {}
+    )
+
+    print("\nLATEST AUDIO METRICS:")
+    print(latest_audio_metrics)
+
+    print("\nLATEST VISION METRICS:")
+    print(latest_vision_metrics)
+
+
     # ===== USER TERMINATION =====
 
     stop_commands = [
@@ -47,7 +74,39 @@ def evaluator_node(state):
         topic=topic,
         question=current_question["question"],
         answer=answer,
-        follow_up_count=follow_up_count
+        follow_up_count=follow_up_count,
+        speech_rate=latest_audio_metrics.get(
+            "speech_rate",
+            0
+        ),
+
+        pause_duration=latest_audio_metrics.get(
+            "pause_duration",
+            0
+        ),
+
+        confidence_score=latest_audio_metrics.get(
+            "confidence_score",
+            0
+        ),
+
+        gaze_alignment_ratio=
+            latest_vision_metrics.get(
+                "gaze_alignment_ratio",
+                0
+            ),
+
+        fidgeting_score=
+            latest_vision_metrics.get(
+                "fidgeting_score",
+                0
+            ),
+
+        face_presence_ratio=
+            latest_vision_metrics.get(
+                "face_presence_ratio",
+                0
+            )
     )
 
     result = generate_json(prompt, max_tokens=256)
@@ -79,9 +138,19 @@ def evaluator_node(state):
 
     evaluations.append({
         "topic": topic,
-        "question": current_question["question"],
+
+        "question":
+            current_question["question"],
+
         "answer": answer,
-        "score": score
+
+        "score": score,
+
+        "audio_metrics":
+            latest_audio_metrics,
+        
+        "vision_metrics":
+            latest_vision_metrics
     })
 
     # ===== GOOD ANSWER =====

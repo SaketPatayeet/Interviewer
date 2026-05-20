@@ -47,5 +47,26 @@ STRICT RULES:
 
 - NEVER generate follow_up if is_complete=true
 
+Communication Metrics:
+- Speech pacing information
+- Pause analysis
+- Vocal stability estimate
+
+These are weak supportive communication signals only.
+DO NOT heavily penalize candidates based on these metrics.
+Technical correctness must dominate evaluation.
+
+Vision Metrics:
+- Gaze Alignement Ratio: {gaze_alignment_ratio}
+- Face Presence Ratio: {face_presence_ratio}
+- Fidgeting Score: {fidgeting_score}
+
+Use these ONLY as communication/presentation signals.
+
+Do NOT heavily penalize technical correctness based on video behavior.
+
+Low eye contact or higher movement may indicate nervousness,
+but should not dominate scoring.
+
 Return ONLY valid JSON.
 """

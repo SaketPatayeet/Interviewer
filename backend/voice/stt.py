@@ -1,6 +1,12 @@
 from faster_whisper import WhisperModel
+
 import sounddevice as sd
+
 from scipy.io.wavfile import write
+
+from whisper_service import transcribe_audio
+
+import uuid
 
 
 model = WhisperModel("base")
@@ -10,7 +16,7 @@ def listen(seconds=5):
 
     fs = 16000
 
-    print("\nListening...")
+    print("Listening...")
 
     audio = sd.rec(
         int(seconds * fs),
@@ -20,14 +26,21 @@ def listen(seconds=5):
 
     sd.wait()
 
-    write("temp.wav", fs, audio)
+    # ===== UNIQUE AUDIO FILE =====
 
-    segments, _ = model.transcribe("temp.wav")
+    filename = f"temp_{uuid.uuid4()}.wav"
 
-    text = ""
+    write(filename, fs, audio)
 
-    for segment in segments:
+    # ===== TRANSCRIBE =====
 
-        text += segment.text
+    text = transcribe_audio(filename)
 
-    return text.strip()
+    # ===== RETURN BOTH =====
+
+    return {
+
+        "text": text,
+
+        "audio_path": filename
+    }
