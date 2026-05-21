@@ -2,11 +2,15 @@
 venv/
 __pycache__/
 *.pyc
-.env/
+.env
+
+# Audio / uploads
+backend/generated_audio/
+backend/uploads/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# PDFs / data (optional)
+# PDFs / data
 *.pdf

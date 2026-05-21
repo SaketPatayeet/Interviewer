@@ -8,7 +8,6 @@ import {
   Upload,
   Download,
   Brain,
-  Timer as TimerIcon,
   Trophy,
   MessageSquare
 } from "lucide-react"
@@ -26,22 +25,17 @@ import useRecorder from "../hooks/useRecorder"
 
 import generateReportPdf from "../utils/generateReportPdf"
 
-
-
-const API =
-  "http://127.0.0.1:8000"
+const API = "http://127.0.0.1:8000"
 
 const MAX_DURATION = 60
 
 const MAX_QUESTIONS = 10
 
-
-
 function InterviewScreen() {
 
-  // ======================================================
+  // =====================================================
   // STATE
-  // ======================================================
+  // =====================================================
 
   const [syllabusText, setSyllabusText] =
     useState("")
@@ -82,21 +76,25 @@ function InterviewScreen() {
   const [visionMetrics, setVisionMetrics] =
     useState({})
 
-  // ======================================================
-  // VIDEO
-  // ======================================================
+  // =====================================================
+  // REFS
+  // =====================================================
 
   const videoRef = useRef(null)
 
-  const [mediaRecorder, setMediaRecorder] =
-    useState(null)
+  const mediaRecorderRef = useRef(null)
 
-  const [stream, setStream] =
-    useState(null)
+  const streamRef = useRef(null)
 
-  // ======================================================
+  const timerRef = useRef(null)
+
+  const hasSubmittedRef = useRef(false)
+
+  const audioPlayerRef = useRef(null)
+
+  // =====================================================
   // RECORDER
-  // ======================================================
+  // =====================================================
 
   const {
     startRecording,
@@ -104,9 +102,47 @@ function InterviewScreen() {
     isRecording
   } = useRecorder()
 
-  // ======================================================
+  const handlePdfUpload = async (event) => {
+
+  const file = event.target.files[0]
+
+  if (!file) return
+
+  const formData = new FormData()
+
+  formData.append("file", file)
+
+  try {
+
+    setIsThinking(true)
+
+    const response =
+      await axios.post(
+        `${API}/interview/upload-syllabus`,
+        formData
+      )
+
+    setSyllabusText(
+      response.data.syllabus_text
+    )
+
+    alert("Syllabus uploaded successfully!")
+
+  } catch (error) {
+
+    console.error(error)
+
+    alert("PDF upload failed")
+
+  } finally {
+
+    setIsThinking(false)
+  }
+}
+
+  // =====================================================
   // TIMER
-  // ======================================================
+  // =====================================================
 
   useEffect(() => {
 
@@ -114,13 +150,22 @@ function InterviewScreen() {
 
     if (interviewComplete) return
 
-    const interval = setInterval(() => {
+    setTimeLeft(MAX_DURATION)
+
+    hasSubmittedRef.current = false
+
+    if (timerRef.current) {
+
+      clearInterval(timerRef.current)
+    }
+
+    timerRef.current = setInterval(() => {
 
       setTimeLeft(prev => {
 
         if (prev <= 1) {
 
-          clearInterval(interval)
+          clearInterval(timerRef.current)
 
           handleTimeUp()
 
@@ -132,71 +177,80 @@ function InterviewScreen() {
 
     }, 1000)
 
-    return () =>
-      clearInterval(interval)
+    return () => {
 
-  }, [questionNumber])
+      if (timerRef.current) {
 
-  const resetTimer = () => {
-
-    setTimeLeft(MAX_DURATION)
-  }
-
-  const handleTimeUp = async () => {
-
-    if (isRecording) {
-
-      await handleRecording()
-
-    } else {
-
-      await submitAnswer()
+        clearInterval(timerRef.current)
+      }
     }
-  }
 
-  // ======================================================
+  }, [question])
+
+  // =====================================================
   // AUDIO
-  // ======================================================
+  // =====================================================
 
   const playAudio = (audioUrl) => {
 
     if (!audioUrl) return
 
+    if (audioPlayerRef.current) {
+
+      audioPlayerRef.current.pause()
+    }
+
     const audio = new Audio(audioUrl)
+
+    audioPlayerRef.current = audio
 
     audio.play()
   }
 
-  // ======================================================
+  // =====================================================
   // VIDEO RECORDING
-  // ======================================================
+  // =====================================================
 
   const startVideoRecording = async () => {
 
     try {
 
-      const mediaStream =
+      const stream =
         await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true
         })
 
-      setStream(mediaStream)
+      streamRef.current = stream
 
       if (videoRef.current) {
 
         videoRef.current.srcObject =
-          mediaStream
+          stream
       }
 
       const recorder =
-        new MediaRecorder(mediaStream, {
+        new MediaRecorder(stream, {
           mimeType: "video/webm"
         })
 
+      const chunks = []
+
+      recorder.ondataavailable =
+        (event) => {
+
+          if (event.data.size > 0) {
+
+            chunks.push(event.data)
+          }
+        }
+
+      recorder.videoChunks = chunks
+
       recorder.start()
 
-      setMediaRecorder(recorder)
+      mediaRecorderRef.current =
+        recorder
 
     } catch (error) {
 
@@ -208,36 +262,28 @@ function InterviewScreen() {
 
     return new Promise((resolve) => {
 
-      if (!mediaRecorder) {
+      const recorder =
+        mediaRecorderRef.current
+
+      if (!recorder) {
 
         resolve(null)
 
         return
       }
 
-      const chunks = []
-
-      mediaRecorder.ondataavailable =
-        (event) => {
-
-          if (event.data.size > 0) {
-
-            chunks.push(event.data)
-          }
-        }
-
-      mediaRecorder.onstop = () => {
+      recorder.onstop = () => {
 
         const blob = new Blob(
-          chunks,
+          recorder.videoChunks,
           {
             type: "video/webm"
           }
         )
 
-        if (stream) {
+        if (streamRef.current) {
 
-          stream
+          streamRef.current
             .getTracks()
             .forEach(track => track.stop())
         }
@@ -245,61 +291,128 @@ function InterviewScreen() {
         resolve(blob)
       }
 
-      mediaRecorder.stop()
+      recorder.stop()
     })
   }
 
-  // ======================================================
+  // =====================================================
   // START INTERVIEW
-  // ======================================================
+  // =====================================================
 
   const startInterview = async () => {
 
-    try {
+  if (!syllabusText.trim()) {
 
-      setIsThinking(true)
+    alert("Please upload syllabus PDF first")
 
-      const response =
-        await axios.post(
-          `${API}/interview/start`,
-          {
-            syllabus_text:
-              syllabusText,
-            strictness: 5
-          }
-        )
-
-      const data = response.data
-
-      setThreadId(data.thread_id)
-
-      setQuestion(data.question)
-
-      setQuestionNumber(1)
-
-      playAudio(data.audio_url)
-
-      resetTimer()
-
-    } catch (error) {
-
-      console.error(error)
-
-    } finally {
-
-      setIsThinking(false)
-    }
+    return
   }
 
-  // ======================================================
+  try {
+
+    setIsThinking(true)
+
+    const response =
+      await axios.post(
+        `${API}/interview/start`,
+        {
+          syllabus_text:
+            syllabusText,
+
+          strictness: 5
+        }
+      )
+
+    const data = response.data
+
+    setThreadId(data.thread_id)
+
+    setQuestion(data.question)
+
+    setQuestionNumber(1)
+
+    playAudio(data.audio_url)
+
+  } catch (error) {
+
+    console.error(error)
+
+    alert("Failed to start interview")
+
+  } finally {
+
+    setIsThinking(false)
+  }
+}
+
+  // =====================================================
   // SUBMIT ANSWER
-  // ======================================================
+  // =====================================================
+
+  const resetInterview = () => {
+
+  setThreadId("")
+
+  setQuestion("")
+
+  setAnswer("")
+
+  setHistory([])
+
+  setQuestionNumber(0)
+
+  setInterviewComplete(false)
+
+  setReport(null)
+
+  setTimeLeft(MAX_DURATION)
+
+  setAudioMetrics({})
+
+  setVisionMetrics({})
+
+  hasSubmittedRef.current = false
+
+  // stop timer
+
+  if (timerRef.current) {
+
+    clearInterval(timerRef.current)
+  }
+
+  // stop audio
+
+  if (audioPlayerRef.current) {
+
+    audioPlayerRef.current.pause()
+  }
+
+  // stop webcam
+
+  if (streamRef.current) {
+
+    streamRef.current
+      .getTracks()
+      .forEach(track => track.stop())
+  }
+
+  // clear webcam preview
+
+  if (videoRef.current) {
+
+    videoRef.current.srcObject = null
+  }
+}
 
   const submitAnswer = async (
     customAnswer = null,
     audioData = {},
     visionData = {}
   ) => {
+
+    if (hasSubmittedRef.current) return
+
+    hasSubmittedRef.current = true
 
     if (isSubmitting) return
 
@@ -338,10 +451,20 @@ function InterviewScreen() {
 
         setReport(data.report)
 
+        generateReportPdf(data.report)
+
+        setTimeout(() => {
+
+    resetInterview()
+
+  }, 2000)
+
         return
       }
 
-      setQuestion(data.next_question)
+      setQuestion(
+        data.next_question
+      )
 
       setHistory(
         data.conversation || []
@@ -352,8 +475,6 @@ function InterviewScreen() {
       )
 
       playAudio(data.audio_url)
-
-      resetTimer()
 
     } catch (error) {
 
@@ -367,13 +488,27 @@ function InterviewScreen() {
     }
   }
 
-  // ======================================================
+  // =====================================================
+  // TIME UP
+  // =====================================================
+
+  const handleTimeUp = async () => {
+
+    if (isRecording) {
+
+      await handleRecording()
+
+    } else {
+
+      await submitAnswer()
+    }
+  }
+
+  // =====================================================
   // RECORDING
-  // ======================================================
+  // =====================================================
 
   const handleRecording = async () => {
-
-    // ===== START =====
 
     if (!isRecording) {
 
@@ -384,8 +519,6 @@ function InterviewScreen() {
       return
     }
 
-    // ===== STOP =====
-
     try {
 
       const audioBlob =
@@ -393,8 +526,6 @@ function InterviewScreen() {
 
       const videoBlob =
         await stopVideoRecording()
-
-      // ===== AUDIO =====
 
       const audioFormData =
         new FormData()
@@ -410,8 +541,6 @@ function InterviewScreen() {
           `${API}/interview/upload-audio`,
           audioFormData
         )
-
-      // ===== VIDEO =====
 
       let vision = {}
 
@@ -462,235 +591,23 @@ function InterviewScreen() {
     }
   }
 
-  // ======================================================
-  // PDF UPLOAD
-  // ======================================================
-
-  const handlePdfUpload = async (
-    event
-  ) => {
-
-    const file =
-      event.target.files[0]
-
-    if (!file) return
-
-    const formData =
-      new FormData()
-
-    formData.append(
-      "file",
-      file
-    )
-
-    try {
-
-      const response =
-        await axios.post(
-          `${API}/interview/upload-syllabus`,
-          formData
-        )
-
-      setSyllabusText(
-        response.data.syllabus_text
-      )
-
-    } catch (error) {
-
-      console.error(error)
-    }
-  }
-
-  // ======================================================
-  // REPORT SCREEN
-  // ======================================================
-
-  if (interviewComplete) {
-
-    return (
-
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-950 text-white p-10">
-
-        <div className="max-w-5xl mx-auto">
-
-          <motion.div
-            initial={{
-              opacity: 0,
-              y: 30
-            }}
-            animate={{
-              opacity: 1,
-              y: 0
-            }}
-            className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-10 shadow-2xl"
-          >
-
-            <div className="text-center mb-10">
-
-              <Trophy
-                size={60}
-                className="mx-auto mb-4 text-yellow-400"
-              />
-
-              <h1 className="text-5xl font-bold mb-4">
-                Interview Report
-              </h1>
-
-              <p className="text-6xl font-bold text-green-400">
-                {report.final_score}/10
-              </p>
-
-            </div>
-
-            <div className="space-y-8">
-
-              <div>
-
-                <h2 className="text-2xl font-bold mb-3">
-                  Overall Performance
-                </h2>
-
-                <p className="text-gray-300">
-                  {
-                    report.overall_performance
-                  }
-                </p>
-
-              </div>
-
-              <div>
-
-                <h2 className="text-2xl font-bold mb-3">
-                  Strengths
-                </h2>
-
-                <div className="grid gap-3">
-
-                  {report.strengths.map(
-                    (item, index) => (
-
-                      <div
-                        key={index}
-                        className="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl"
-                      >
-                        {item}
-                      </div>
-
-                    )
-                  )}
-
-                </div>
-
-              </div>
-
-              <div>
-
-                <h2 className="text-2xl font-bold mb-3">
-                  Weaknesses
-                </h2>
-
-                <div className="grid gap-3">
-
-                  {report.weaknesses.map(
-                    (item, index) => (
-
-                      <div
-                        key={index}
-                        className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl"
-                      >
-                        {item}
-                      </div>
-
-                    )
-                  )}
-
-                </div>
-
-              </div>
-
-              <div>
-
-                <h2 className="text-2xl font-bold mb-3">
-                  Suggestions
-                </h2>
-
-                <div className="grid gap-3">
-
-                  {report.suggestions.map(
-                    (item, index) => (
-
-                      <div
-                        key={index}
-                        className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl"
-                      >
-                        {item}
-                      </div>
-
-                    )
-                  )}
-
-                </div>
-
-              </div>
-
-              <button
-                onClick={() =>
-                  generateReportPdf(report)
-                }
-                className="w-full bg-white text-black py-4 rounded-2xl font-bold hover:scale-105 transition-all duration-300 flex items-center justify-center gap-3"
-              >
-
-                <Download />
-
-                Download PDF Report
-
-              </button>
-
-            </div>
-
-          </motion.div>
-
-        </div>
-
-      </div>
-    )
-  }
-
-  // ======================================================
-  // MAIN UI
-  // ======================================================
-
   return (
 
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-950 text-white p-6">
+    <div className="min-h-screen w-full bg-black text-white p-4 md:p-6 overflow-x-hidden">
 
-      <div className="max-w-7xl mx-auto grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
 
-        {/* ================================================= */}
-        {/* LEFT PANEL */}
-        {/* ================================================= */}
+        {/* LEFT */}
 
         <div className="space-y-6">
 
-          {/* ===== AI CARD ===== */}
-
-          <motion.div
-            initial={{
-              opacity: 0,
-              x: -20
-            }}
-            animate={{
-              opacity: 1,
-              x: 0
-            }}
-            className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6"
-          >
+          <div className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800">
 
             <div className="flex items-center gap-4">
 
               <div className="w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
 
-                <Brain size={32} />
+                <Brain size={30} />
 
               </div>
 
@@ -700,7 +617,7 @@ function InterviewScreen() {
                   AI Interviewer
                 </h2>
 
-                <p className="text-gray-400">
+                <p className="text-zinc-400">
 
                   {isThinking
                     ? "Thinking..."
@@ -712,13 +629,13 @@ function InterviewScreen() {
 
             </div>
 
-          </motion.div>
+          </div>
 
-          {/* ===== TIMER ===== */}
+          {/* TIMER */}
 
-          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
+          <div className="bg-zinc-900 rounded-3xl p-8 border border-zinc-800">
 
-            <div className="w-40 mx-auto">
+            <div className="w-40 h-40 mx-auto">
 
               <CircularProgressbar
                 value={timeLeft}
@@ -727,8 +644,7 @@ function InterviewScreen() {
                 styles={buildStyles({
                   textColor: "#fff",
                   pathColor: "#22c55e",
-                  trailColor:
-                    "rgba(255,255,255,0.1)"
+                  trailColor: "#27272a"
                 })}
               />
 
@@ -736,9 +652,9 @@ function InterviewScreen() {
 
           </div>
 
-          {/* ===== VIDEO ===== */}
+          {/* VIDEO */}
 
-          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden">
+          <div className="bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-800">
 
             <video
               ref={videoRef}
@@ -749,55 +665,15 @@ function InterviewScreen() {
 
           </div>
 
-          {/* ===== METRICS ===== */}
-
-          <div className="grid grid-cols-2 gap-4">
-
-            <MetricCard
-              title="Confidence"
-              value={
-                audioMetrics.confidence ||
-                "--"
-              }
-            />
-
-            <MetricCard
-              title="Eye Contact"
-              value={
-                visionMetrics.eye_contact ||
-                "--"
-              }
-            />
-
-            <MetricCard
-              title="Speech Rate"
-              value={
-                audioMetrics.speaking_rate ||
-                "--"
-              }
-            />
-
-            <MetricCard
-              title="Posture"
-              value={
-                visionMetrics.posture ||
-                "--"
-              }
-            />
-
-          </div>
-
         </div>
 
-        {/* ================================================= */}
-        {/* RIGHT PANEL */}
-        {/* ================================================= */}
+        {/* RIGHT */}
 
         <div className="lg:col-span-2 space-y-6">
 
-          {/* ===== HEADER ===== */}
+          {/* HEADER */}
 
-          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex items-center justify-between">
+          <div className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
             <div>
 
@@ -805,47 +681,43 @@ function InterviewScreen() {
                 AI Mock Interview
               </h1>
 
-              <p className="text-gray-400 mt-2">
-                Question {questionNumber}
-                {" "}
-                /
-                {" "}
-                {MAX_QUESTIONS}
+              <p className="text-zinc-400 mt-2">
+                Question {questionNumber}/{MAX_QUESTIONS}
               </p>
 
             </div>
 
-            <label className="bg-white text-black px-5 py-3 rounded-2xl cursor-pointer font-semibold hover:scale-105 transition-all duration-300 flex items-center gap-3">
+            <label className="bg-white text-black px-5 py-3 rounded-2xl cursor-pointer font-semibold flex items-center gap-3 hover:scale-105 transition-all">
 
               <Upload />
 
               Upload PDF
 
-              <input
-                type="file"
-                accept=".pdf"
-                hidden
-                onChange={handlePdfUpload}
-              />
+                <input
+    type="file"
+    accept=".pdf"
+    hidden
+    onChange={handlePdfUpload}
+  />
 
             </label>
 
           </div>
 
-          {/* ===== START ===== */}
+          {/* START */}
 
           {!threadId && (
 
             <button
               onClick={startInterview}
-              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 py-5 rounded-3xl text-xl font-bold hover:scale-[1.02] transition-all duration-300"
+              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 py-5 rounded-3xl text-xl font-bold hover:scale-[1.02]"
             >
               Start Interview
             </button>
 
           )}
 
-          {/* ===== QUESTION ===== */}
+          {/* QUESTION */}
 
           {threadId && (
 
@@ -859,10 +731,10 @@ function InterviewScreen() {
                 opacity: 1,
                 y: 0
               }}
-              className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-8"
+              className="bg-zinc-900 rounded-3xl p-8 border border-zinc-800"
             >
 
-              <div className="flex items-center gap-3 mb-5">
+              <div className="flex items-center gap-3 mb-4">
 
                 <MessageSquare />
 
@@ -880,11 +752,11 @@ function InterviewScreen() {
 
           )}
 
-          {/* ===== ANSWER ===== */}
+          {/* ANSWER */}
 
           {threadId && (
 
-            <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
+            <div className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800">
 
               <textarea
                 value={answer}
@@ -899,62 +771,50 @@ function InterviewScreen() {
 
           )}
 
-          {/* ===== CONTROLS ===== */}
+          {/* CONTROLS */}
 
           {threadId && (
 
-            <div className="flex gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-              <div className="flex gap-4">
+              <button
+                onClick={handleRecording}
+                className={`py-5 rounded-3xl font-bold text-lg flex items-center justify-center gap-3 transition-all ${
+                  isRecording
+                    ? "bg-red-500 animate-pulse"
+                    : "bg-green-500 hover:scale-105"
+                }`}
+              >
 
-  {/* ===== RECORD ===== */}
+                {isRecording
+                  ? <Square />
+                  : <Mic />}
 
-  <button
-    onClick={handleRecording}
-    className={`flex-1 py-5 rounded-3xl font-bold text-lg transition-all duration-300 flex items-center justify-center gap-3 ${
-      isRecording
-        ? "bg-red-500 animate-pulse scale-105"
-        : "bg-green-500 hover:scale-105"
-    }`}
-  >
+                {isRecording
+                  ? "Stop Recording"
+                  : "Start Recording"}
 
-    {isRecording
-      ? <Square />
-      : <Mic />}
+              </button>
 
-    {isRecording
-      ? "Stop Recording"
-      : "Start Recording"}
+              <button
+                disabled={isSubmitting}
+                onClick={() =>
+                  submitAnswer()
+                }
+                className="bg-white text-black py-5 rounded-3xl font-bold text-lg hover:scale-105"
+              >
+                Submit Answer
+              </button>
 
-  </button>
-
-  {/* ===== SUBMIT ===== */}
-
-  <button
-    disabled={isSubmitting}
-    onClick={() =>
-      submitAnswer()
-    }
-    className="flex-1 bg-white text-black py-5 rounded-3xl font-bold text-lg hover:scale-105 transition-all duration-300"
-  >
-    Submit Answer
-  </button>
-
-  {/* ===== END INTERVIEW ===== */}
-
-  <button
-    disabled={isSubmitting}
-    onClick={() =>
-      submitAnswer("finish")
-    }
-    className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 text-white py-5 rounded-3xl font-bold text-lg hover:scale-105 transition-all duration-300"
-  >
-    End Interview
-  </button>
-
-</div>
-
-              
+              <button
+                disabled={isSubmitting}
+                onClick={() =>
+                  submitAnswer("finish")
+                }
+                className="bg-gradient-to-r from-red-500 to-pink-500 py-5 rounded-3xl font-bold text-lg hover:scale-105"
+              >
+                End Interview
+              </button>
 
             </div>
 
@@ -967,30 +827,5 @@ function InterviewScreen() {
     </div>
   )
 }
-
-
-
-function MetricCard({
-  title,
-  value
-}) {
-
-  return (
-
-    <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-5">
-
-      <p className="text-gray-400 text-sm">
-        {title}
-      </p>
-
-      <h3 className="text-2xl font-bold mt-2">
-        {value}
-      </h3>
-
-    </div>
-  )
-}
-
-
 
 export default InterviewScreen
