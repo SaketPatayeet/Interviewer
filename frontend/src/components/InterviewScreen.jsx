@@ -25,7 +25,7 @@ import useRecorder from "../hooks/useRecorder"
 
 import generateReportPdf from "../utils/generateReportPdf"
 
-const API = "http://127.0.0.1:8000"
+const API = import.meta.env.VITE_API_URL
 
 const MAX_DURATION = 60
 
